@@ -293,6 +293,9 @@ ul {
   max-width: var(--max-width);
   margin: 0 auto;
 }
+
+/* This style is usually for all Wrapper component to center the content
+to harmonize the style of all pages */
 .full-page {
   min-height: 100vh;
 }
