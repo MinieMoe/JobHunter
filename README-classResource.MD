@@ -403,6 +403,16 @@ return (
 
 #### Global Context
 - Context Tutorial: https://beta.reactjs.org/learn/passing-data-deeply-with-context
+- Steps to use Context:
+1. Create a context. (You can call it LevelContext, since it’s for the heading level.)
+2. Use that context from the component that needs the data. (Heading will use LevelContext.)
+3. Provide that context from the component that specifies the data. (Section will provide LevelContext.)
+
+-How context pass value (check the link for more details; this is just the important take from it)
+1. You pass a level prop to the < Section >.
+2. Section wraps its children into <LevelContext.Provider value={level}>.
+3. Heading asks the closest value of LevelContext above with useContext(LevelContext).
+
 - in src create <b>context</b> directory
 - actions.js
 - reducer.js
@@ -1443,7 +1453,7 @@ MONGO_URL = mongodb+srv://minn:<password>@cluster0.kmvrsbw.mongodb.net/<DATABASE
 ```
 #### Auth Controller and Route Structure
 - Controller and Route - what does it do and why we need to seperate them into controller and route folder: https://lo-victoria.com/build-a-rest-api-with-nodejs-routes-and-controllers
-- Controllers are typically callback functions that corresponds to the routers to handle requests. It is a good design principle to keep the code concise and readable. 
+- Controllers are typically callback functions that corresponds to the routers to handle requests. It is a good design principle to keep the code concise and readable. Ex: '/register' route will have register controller, which has all the logics of what to do when user is trying to reigster
 - Basic of Router() middleware: https://developer.mozilla.org/en-US/docs/Learn/Server-side/Express_Nodejs/routes
 - Since Router() is a middleware, we have to call use() on it to use it
 - create <b>controllers</b>
@@ -1489,9 +1499,14 @@ export { createJob, deleteJob, getAllJobs, updateJob, showStats };
 - setup express router
 - import functions from jobsController.js
 
+. Multiple Routing: https://www.geeksforgeeks.org/express-js-router-route-function/
+- A route below (ex: '/') can handle multiple HTTP requests
 ```js
 router.route('/').post(createJob).get(getAllJobs);
-// place before :id
+// place route to '/stat' before :id bc route '/stat' show all the jobs available
+//...and '/:id' is a value from MongoDB that tells which job to show from all the available jobs
+//...therefore, it's important to place '/stat' before '/:id'
+//...as Express will check for route in order it's given: '/' (root) -> '/stats/ -> '/:id'
 router.route('/stats').get(showStats);
 router.route('/:id').delete(deleteJob).patch(updateJob);
 
@@ -1505,6 +1520,31 @@ app.use('/api/v1/jobs', jobsRouter);
 ```
 
 #### Postman
+- Postman let you test if you're sending HTTP request successfully
+
+In the code snipet below:
+- If we're successfully sending POST request to 'http://localhost:5000/api/v1/auth/register', then Postman should print 'register user' as implemented in authControler.js
+
+- The same logic applies to '/login' and '/updateUser'
+```js
+//in server.js
+
+import authRouter from './routes/authRoutes.js'
+app.use('/api/v1/auth', authRouter)
+
+//in authRouter.js
+import { register, login, updateUser  } from '../controllers/authController.js'
+
+router.route('/register').post(register)
+router.route('/login').post(login)
+router.route('/updateUser').patch(updateUser)
+
+//in authController.js
+
+const register = (req, res) =>{
+    res.send('register user')
+}
+```
 
 - URL global var
 - JOBIFY Collection
@@ -1512,6 +1552,10 @@ app.use('/api/v1/jobs', jobsRouter);
 - setup routes
 
 #### User Model
+
+- Mongoose Schema: https://www.freecodecamp.org/news/introduction-to-mongoose-for-mongodb-d2a7aa593c57/
+- Mongoose: https://developer.mozilla.org/en-US/docs/Learn/Server-side/Express_Nodejs/mongoose
+- Mongoose model: https://mongoosejs.com/docs/models.html
 
 - <b>models</b> folder
 - User.js
@@ -1523,12 +1567,14 @@ app.use('/api/v1/jobs', jobsRouter);
 
 ```js
 validate:{
+  //validator includes a reference to a function that will be called when trying to set up the user
   validator:(field)=> {return 2 > 1},
   message:'Please provide valid email'
   }
 ```
 
 - [Validator Package](https://www.npmjs.com/package/validator)
+- This package saves us time from coding. For ex, instead of making a code checking if a string has a email format from scratch, call isEmail() from external package validator and have it do the work for us,
 
 ```sh
 npm install validator
@@ -1538,6 +1584,13 @@ npm install validator
 - validator.isEmail
 
 #### Register User - Initial Setup
+- User is a Mongoose.model, check the mongoose Document here to see what functions Mongoose.model have: https://mongoosejs.com/docs/api/model.html
+- In server.js, we have:
+```js
+app.use(express.json())
+```
+--> This means all our request and response will have data as JSON format
+Therefore, req.body will be a JSON string
 
 - authController
 - import User model
@@ -1548,7 +1601,47 @@ npm install validator
 
 #### Pass Error to Error Handler
 
-- next(error)
+- next(error): https://stackoverflow.com/questions/10695629/what-is-the-parameter-next-used-for-in-express
+--> bassically passing the control over to the next middleware function
+
+- In server.js, when creating a new user, authRouter would be called 
+- authRouter will route the user to the correct route/path. ex: User want to register, they will be routed to '/register'
+- At '/register', authRouter will call the 'register' function from authController to execute the registration process shown in authController.js
+- If there is an error, we can pass the error in next() 
+- next() will pass the error to the next middleware function in server.js, which is errorHandlerMiddleware. Note: this is why it's important to put app.use(errorHandlerMiddleware) last so we can use next() to pass the stuff over
+- ...then the error will be handle in error-handler.js
+
+- This is a good practice especially for controllers
+- Shipping error off to error handler instead of making the controller handling them itself (otherwise, will be a large block of codes in controllers, not readable)
+
+```js
+app.use('/api/v1/auth', authRouter)
+app.use('/api/v1/jobs', jobsRouter)
+
+app.use(notFoundMiddleware)
+app.use(errorHandlerMiddleware)
+```
+
+- In authController.js, 
+```js
+const register = async (req, res, next) =>{
+  
+    try {
+        const user = await User.create(req.body)
+        res.status(201).json({user})
+    } catch (error) {
+        //res.status(500).json({msg: 'there was an error'})
+        next(error)
+    }
+}
+```
+- In error-handler.js,
+```js
+const errorHandlerMiddleware = (err, req, res, next) => {
+    console.log(err)
+    res.status(500).json({msg: err})
+}
+```
 
 #### Express-Async-Errors Package
 
@@ -1583,6 +1676,49 @@ npm install http-status-codes
 - setup defaultError
 
 #### Custom Errors
+
+- Missing fields error
+The response sent back is an error under the name 'msg'
+- errors: what are the errors? In the ex below, it's missing email
+```js
+{
+    "msg": {
+        "errors": {
+            "email": {
+                "name": "ValidatorError",
+                "message": "Please provide email",
+                "properties": {
+                    "message": "Please provide email",
+                    "type": "required",
+                    "path": "email"
+                },
+                "kind": "required",
+                "path": "email"
+            }
+        },
+        "_message": "User validation failed",
+        "name": "ValidationError",
+        "message": "User validation failed: email: Please provide email"
+    }
+}
+```
+
+- Unique Key Error
+The json data below is from error 'msg' where unique value (email) is duplicate
+```js
+{
+    "msg": {
+        "index": 0,
+        "code": 11000,
+        "keyPattern": {
+            "email": 1
+        },
+        "keyValue": {
+            "email": "min@gmail.com"
+        }
+    }
+}
+```
 
 #### Refactor Errors
 
